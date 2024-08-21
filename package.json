@@ -1,0 +1,14 @@
+{
+  "name": "stressfreeheadbackend",
+  "version": "1.0.0",
+  "description": "StressFreeHead Backend",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "backend"
+  ],
+  "author": "DUSHAL",
+  "license": "ISC"
+}
