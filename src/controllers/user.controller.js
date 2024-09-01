@@ -4,6 +4,8 @@ import {ApiError} from "./../utils/ApiError.js"
 import {User} from "../models/user.model.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 import jwt from "jsonwebtoken"
+import nodemailer from 'nodemailer';
+import crypto from 'crypto';
 
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
@@ -150,8 +152,6 @@ return res
 
 })
 
-
-
 const refreshAccessToken = asyncHandler(async (req, res) => {
  const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
 
@@ -198,6 +198,82 @@ try {
 // return res.status(200).json(new ApiResponse(200, {accessToken}, "Access token refreshed successfully"));
  
 
+
 })
 
-export {registerUser, loginUser,logoutUser, refreshAccessToken }
+// Create reusable transporter object using the default SMTP transport
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_PASS,
+  },
+});
+
+// Function to generate and send OTP
+const generateAndSendOTP = async (user) => {
+  const otp = crypto.randomInt(100000, 999999).toString();
+  const expiresAt = Date.now() + 5 * 60 * 1000; // OTP expires in 5 minutes
+
+  user.otp = { code: otp, expiresAt };
+  await user.save({ validateBeforeSave: false });
+
+  // Send OTP via email
+  const mailOptions = {
+      from: process.env.GMAIL_USER,
+      to: user.email,
+      subject: 'Your OTP for Password Reset',
+      text: `Your OTP for password reset is ${otp}. This OTP will expire in 5 minutes.`,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
+// API to request OTP
+const requestOTP = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+      throw new ApiError(400, "Email is required");
+  }
+
+  const user = await User.findOne({ email });
+
+  if (!user) {
+      throw new ApiError(404, "User not found");
+  }
+
+  await generateAndSendOTP(user);
+
+  res.status(200).json(new ApiResponse(200, "OTP sent successfully"));
+});
+
+// API to verify OTP
+const verifyOTP = asyncHandler(async (req, res) => {
+  const { email, otp } = req.body;
+
+  if (!email || !otp) {
+      throw new ApiError(400, "Email and OTP are required");
+  }
+
+  const user = await User.findOne({ email });
+
+  if (!user || !user.otp || user.otp.code !== otp) {
+      throw new ApiError(400, "Invalid OTP");
+  }
+
+  if (Date.now() > user.otp.expiresAt) {
+      user.otp = undefined;
+      await user.save({ validateBeforeSave: false });
+      throw new ApiError(400, "OTP expired");
+  }
+
+  user.otp = undefined; // Clear the OTP after successful validation
+  await user.save({ validateBeforeSave: false });
+
+  // OTP is valid, allow the user to reset the password (handle password reset flow here)
+
+  res.status(200).json(new ApiResponse(200, "OTP verified successfully"));
+});
+
+export {registerUser, loginUser,logoutUser, refreshAccessToken, requestOTP, verifyOTP}

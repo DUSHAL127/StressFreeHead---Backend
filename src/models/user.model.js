@@ -41,6 +41,10 @@ const userSchema = new Schema({
     package: {
         type: String
     },
+    otp: {
+        code: { type: String },
+        expiresAt: { type: Date }
+    },
     createdAt: {
         type: Date,
         default: Date.now
